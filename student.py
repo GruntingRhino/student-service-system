@@ -36,4 +36,4 @@ if not re.match(r'^\d{4}-\d{2}-\d{2}$', date):
 
 with open('service_hours.csv', mode='a', newline='') as file:
     writer = csv.writer(file)
-    writer.writerow([user_name, date, hours_worked])
+    writer.writerow([user_name, date, hours_worked, "false"])
