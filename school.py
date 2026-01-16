@@ -136,50 +136,88 @@ def create_total_hours_csv():
     except Exception as e:
         print(f"Error writing total_hours.csv: {e}")
 
-rows = []
+def get_student_total_hours(student_name):
+    """
+    Reads total_hours.csv and returns the total hours for a specific student.
+    
+    Args:
+        student_name (str): Name of the student to look up
+    
+    Returns:
+        float: Total hours for the student, or 0.0 if student not found
+    """
+    try:
+        if not os.path.exists('total_hours.csv'):
+            print("total_hours.csv not found. Creating it now...")
+            create_total_hours_csv()
+        
+        with open('total_hours.csv', 'r', newline='') as file:
+            reader = csv.reader(file)
+            next(reader)  # Skip header row
+            for row_number, row in enumerate(reader, start=2):  # Start at 2 (after header)
+                if len(row) >= 2:
+                    name = row[0].strip()
+                    try:
+                        hours = float(row[1])
+                        if name.lower() == student_name.lower():
+                            return hours
+                    except (ValueError, IndexError):
+                        print(f"Warning: Skipping corrupted row {row_number} in total_hours.csv: {row}")
+                        continue
+        return 0.0  # Student not found
+    except FileNotFoundError:
+        print("total_hours.csv not found.")
+        return 0.0
+    except Exception as e:
+        print(f"Error reading total_hours.csv: {e}")
+        return 0.0
 
-# Step 1: Check for corrupted rows
+students = {}
+
+class Student:
+    def __init__(self, name):
+        self.name = name
+        self.total_hours = 0.0
+
+    def add_hours(self, hours):
+        self.total_hours += hours
+
+# Check for corrupted rows before processing
 corrupted = check_for_corrupted_rows('service_hours.csv')
 if corrupted:
-    print(f"Warning: Found {len(corrupted)} corrupted row(s). They will be skipped during approval process.")
+    print(f"Warning: Found {len(corrupted)} corrupted row(s). They will be skipped.")
 
-# Step 2: Read entire CSV into memory
 try:
     with open('service_hours.csv', 'r', newline='') as file:
         reader = csv.reader(file)
-        rows = list(reader)
+        for row_number, row in enumerate(reader, start=1):
+            # Skip corrupted rows
+            is_corrupted, _ = is_row_corrupted(row, row_number)
+            if is_corrupted:
+                continue
+            
+            if len(row) >= 4:
+                name = row[0].strip()
+                try:
+                    hours = float(row[2])
+                    
+                    if name not in students:
+                        students[name] = Student(name)
+                    
+                    students[name].add_hours(hours)
+                except (ValueError, IndexError) as e:
+                    print(f"Skipping row {row_number}: Error processing hours - {e}")
+                    continue
 except FileNotFoundError:
     print("File not found. Please check the file path.")
     exit()
 
-# Step 3: Modify rows (skip corrupted rows)
-valid_rows = []
-for row_number, row in enumerate(rows, start=1):
-    is_corrupted, _ = is_row_corrupted(row, row_number)
-    if is_corrupted:
-        print(f"Skipping corrupted row {row_number}: {row}")
-        continue
-    valid_rows.append(row)
+# Print totals
+for student in students.values():
+    print(student.name, student.total_hours)
 
-# Step 4: Process approvals for valid rows
-for row in valid_rows:
-    if row[3].lower() == "false":
-        status = input(f"{row[0]}'s hours are pending approval. Approve? (y/n): ")
-        if status.lower() == "y":
-            row[3] = "true"
-            print(f"{row[0]}'s hours have been approved.")
-        else:
-            print(f"{row[0]}'s hours remain unapproved.")
-
-# Step 5: Write valid rows back (corrupted rows are excluded)
-try:
-    with open('service_hours.csv', 'w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerows(valid_rows)
-except FileNotFoundError:
-    print("File not found. Please check the file path.")
-    exit()
-
-# Update total hours CSV after approvals
-create_total_hours_csv()
-
+# Also read from total_hours.csv and report
+print("\n=== Total Hours from total_hours.csv ===")
+for student in students.values():
+    total_hours = get_student_total_hours(student.name)
+    print(f"{student.name}: {total_hours} hours")
